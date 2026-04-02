@@ -1,0 +1,175 @@
+Sub AtualizarDados()
+
+    Dim wbOrigem As Workbook
+    Dim wsOrigem As Worksheet
+    Dim wsDestino As Worksheet
+
+    Application.ScreenUpdating = False
+    Application.Calculation = xlCalculationManual
+
+    ' Caminho do arquivo origem
+    Set wbOrigem = Workbooks.Open("C:\Users\amanda.guimaraes\Downloads\Relatório Áreas\Base de Dados Rel por Areas.xlsx")
+    Set wsOrigem = wbOrigem.Sheets("Database")
+    Set wsDestino = ThisWorkbook.Sheets("Database")
+
+    ' Limpa o destino
+    wsDestino.Cells.Clear
+
+    ' Copia o intervalo usado
+    wsOrigem.UsedRange.Copy
+
+    ' Cola SOMENTE os valores
+    wsDestino.Range("A1").PasteSpecial Paste:=xlPasteValues
+
+    ' Cola SOMENTE a formatação
+    wsDestino.Range("A1").PasteSpecial Paste:=xlPasteFormats
+
+    ' Limpa a área de transferência
+    Application.CutCopyMode = False
+
+    ' Fecha o arquivo origem sem salvar
+    wbOrigem.Close SaveChanges:=False
+
+    Application.Calculation = xlCalculationAutomatic
+    Application.ScreenUpdating = True
+
+    MsgBox "Dados atualizados com sucesso!"
+
+End Sub
+
+Sub Gerar_Todos()
+
+    Dim wsGeral As Worksheet
+    Dim pt1 As PivotTable, pt2 As PivotTable
+    Dim ResponsibleList As Variant
+    Dim NomeResponsible As Variant
+    Dim wbNovo As Workbook
+    Dim caminhoArquivo As String
+    Dim wsNova As Worksheet
+    Dim ultimaLinha As Long
+    Dim ultimaColuna As Long
+
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    Application.EnableEvents = False
+    Application.Calculation = xlCalculationManual
+
+    Set wsGeral = ThisWorkbook.Sheets("Geral")
+
+    Set pt1 = wsGeral.PivotTables("Tabela dinâmica1")
+    Set pt2 = wsGeral.PivotTables("Tabela dinâmica2")
+
+    ResponsibleList = Array("Administrativo", "CDU", "Compras", "Engenharia", _
+                            "Finanças", "Marketing", "Operações Compressores", _
+                            "Operações Fundição", "Qualidade", "Recursos Humanos", _
+                            "SIOP", "Vendas")
+
+    ' Atualiza Pivot apenas uma vez
+    pt1.PivotCache.Refresh
+
+    For Each NomeResponsible In ResponsibleList
+
+    ' Filtra as duas pivots
+    FiltrarPivot pt1, CStr(NomeResponsible)
+    FiltrarPivot pt2, CStr(NomeResponsible)
+
+    Application.Calculate
+    DoEvents
+
+    ' Cria novo arquivo
+    Set wbNovo = Workbooks.Add(xlWBATWorksheet)
+
+    ' Copia aba Geral
+    wsGeral.Copy Before:=wbNovo.Sheets(1)
+
+    ' Copia aba Database também
+    ThisWorkbook.Sheets("Database").Copy After:=wbNovo.Sheets(wbNovo.Sheets.Count)
+
+    ' Remove aba vazia criada automaticamente
+    wbNovo.Sheets(wbNovo.Sheets.Count - 1).Delete
+
+    caminhoArquivo = "C:\Users\amanda.guimaraes\Downloads\Relatório Áreas\OPEX_" & NomeResponsible & ".xlsx"
+
+    ' Se já existir, apaga
+    If Dir(caminhoArquivo) <> "" Then Kill caminhoArquivo
+
+    wbNovo.SaveAs caminhoArquivo, xlOpenXMLWorkbook
+    wbNovo.Close False
+
+Next NomeResponsible
+
+Finalizar:
+
+    Application.Calculation = xlCalculationAutomatic
+    Application.EnableEvents = True
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+
+    MsgBox "Todos os relatórios foram gerados com sucesso ??", vbInformation
+
+End Sub
+
+Sub FiltrarPivot(pt As PivotTable, ByVal NomeResponsible As Variant)
+
+    Dim pf As PivotField
+    Dim pi As PivotItem
+    Dim encontrou As Boolean
+
+    Set pf = pt.PivotFields("Responsible")
+
+    Application.EnableEvents = False
+    Application.ScreenUpdating = False
+
+    On Error Resume Next
+
+    pf.ClearAllFilters
+    pf.EnableMultiplePageItems = True
+
+    encontrou = False
+
+    For Each pi In pf.PivotItems
+
+        Select Case NomeResponsible
+
+            Case "Administrativo"
+                If pi.Name = "Administrativo" _
+                Or pi.Name = "Admin Global" Then
+                    pi.Visible = True
+                    encontrou = True
+                Else
+                    pi.Visible = False
+                End If
+
+            Case "Engenharia"
+                If InStr(1, pi.Name, "Engenharia", vbTextCompare) > 0 Then
+                    pi.Visible = True
+                    encontrou = True
+                Else
+                    pi.Visible = False
+                End If
+
+            Case Else
+                If pi.Name = NomeResponsible Then
+                    pi.Visible = True
+                    encontrou = True
+                Else
+                    pi.Visible = False
+                End If
+
+        End Select
+
+    Next pi
+
+    ' Segurança: se nada foi encontrado, mantém o primeiro visível
+    If encontrou = False Then
+        pf.PivotItems(1).Visible = True
+    End If
+
+    pt.RefreshTable
+
+    On Error GoTo 0
+
+    Application.EnableEvents = True
+    Application.ScreenUpdating = True
+
+End Sub
